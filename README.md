@@ -6,7 +6,7 @@ In Progress.
 ## Data Release
 For [Alpaca dataset](https://github.com/flexflow/FlexFlow/tree/inference?tab=readme-ov-file#prompt-datasets), we use exactly the same exact source as [SpecInfer](https://arxiv.org/pdf/2305.09781.pdf).
 
-For the WMT dataset, we follow the process of SpecInfer: randomly sampling 1000 samples from the test set. We wrap the source sentences using the following template:
+For the [WMT dataset](/dataset/wmt_ende.json), we follow the process of SpecInfer: randomly sampling 1000 samples from the test set. We wrap the source sentences using the following template:
 ```
 Translate the input English sentence into German.
 Input: {source sentence}
