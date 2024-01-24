@@ -1,17 +1,9 @@
-from typing import List, Literal, Tuple, Union, Optional, Callable
+import warnings
+from dataclasses import dataclass
+from typing import Callable, List, Literal, Optional, Tuple, Union
 
 import torch
-from transformers.modeling_outputs import (
-    ModelOutput,
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
-
-
-from dataclasses import dataclass
-
-import warnings
+from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
 
 
 @dataclass
@@ -34,7 +26,7 @@ class DecoderOnlyVerificationOutput(ModelOutput):
     sequences: torch.LongTensor = None
     target_model_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     draft_model_past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    acceptance: Optional[int] = (None,)
+    acceptance_count: Optional[int] = None
 
 
 def _MCNS(
@@ -94,8 +86,8 @@ class Strategy:
         draft_model,
         target_model,
         k_config: Tuple[int],
-        draft_model_temp=1,
-        target_model_temp=1,
+        draft_model_temp: float = 1,
+        target_model_temp: float = 1,
         replacement: bool = False,
         speculative_sampling: bool = True,
     ) -> None:
@@ -376,5 +368,30 @@ class BatchStrategy(Strategy):
             sequences=input_ids,
             target_model_past_key_values=target_model_past_key_values,
             draft_model_past_key_values=draft_model_past_key_values,
-            acceptance=depth,
+            acceptance_count=depth,
         )
+
+
+class TreeStrategy(Strategy):
+    def __init__(
+        self,
+        draft_model,
+        target_model,
+        k_config: Tuple[int],
+        draft_model_temp: float = 1,
+        target_model_temp: float = 1,
+        replacement: bool = False,
+        speculative_sampling: bool = True,
+    ) -> None:
+        super().__init__(
+            draft_model,
+            target_model,
+            k_config,
+            draft_model_temp,
+            target_model_temp,
+            replacement,
+            speculative_sampling,
+        )
+
+        # TODO
+        raise NotImplementedError
