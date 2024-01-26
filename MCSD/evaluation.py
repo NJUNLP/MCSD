@@ -132,7 +132,7 @@ def main(args):
         k_config=args.k_config,
         datapath=args.datapath,
         max_new_tokens=args.max_new_tokens,
-        replacement=not args.replacement,
+        replacement=args.replacement,
         speculative_sampling=not args.naive_sampling,
         tree_attn=not args.disable_tree_attn,
         sampling_type=args.sampling_type,
