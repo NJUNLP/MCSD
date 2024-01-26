@@ -114,7 +114,7 @@ class Strategy:
                 if draft_model_temp == 0:
                     warnings.warn(
                         (
-                            "You have set Temp=0 and are using sampling without replacement. "
+                            "You have set Temp=0 and are using sampling with replacement. "
                             "As a result, all the candidates obtained are the same, causing "
                             "the MCSD algorithm to degenerate into the vanilla SD."
                         ),
@@ -221,7 +221,7 @@ class BatchStrategy(Strategy):
                 else:
                     topk_logit, topk_index = logits.topk(k=1, dim=-1)  # batch x k
                     step_cand_probs = torch.zeros_like(logits)
-                    step_cand_probs.scatter_(dim=1, index=topk_index, src=topk_probs)
+                    step_cand_probs.scatter_(dim=1, index=topk_index, value=1)
                     cand_tokens = topk_index.view(-1, 1)
                     cand_tokens = torch.repeat_interleave(cand_tokens, step_k, dim=0)
             else:
@@ -496,9 +496,9 @@ class TreeStrategy(Strategy):
                 else:
                     topk_logit, topk_index = logits.topk(k=1, dim=-1)  # seq_len x k
                     step_cand_probs = torch.zeros_like(logits)
-                    step_cand_probs.scatter_(dim=1, index=topk_index, src=topk_probs)
-                    cand_tokens = topk_index.view(-1, 1)
-                    cand_tokens = torch.repeat_interleave(cand_tokens, step_k, dim=0)
+                    step_cand_probs.scatter_(dim=1, index=topk_index, value=1)
+                    cand_tokens = topk_index.view(1, -1)
+                    cand_tokens = torch.repeat_interleave(cand_tokens, step_k, dim=1)
             else:
                 step_cand_probs = torch.softmax(logits / self.draft_model_temp, dim=-1)
                 cand_tokens = torch.multinomial(
@@ -587,7 +587,7 @@ class TreeStrategy(Strategy):
         cand_probs: Optional[Tuple[torch.FloatTensor]],
     ) -> DecoderOnlyVerificationOutput:
         input_ids = input_ids.to(self.target_model_device)
-        logits, target_model_past_key_values = self._forward_LLM(
+        logits, target_model_past_key_values = self._forward_target_model(
             input_ids, target_model_past_key_values
         )
         logits = logits[0]  # seq_len x hidden_dim
@@ -610,7 +610,7 @@ class TreeStrategy(Strategy):
         cand_probs_idx = 0
 
         for depth in range(self.max_draft_len):
-            idx_base = self.cumsum_prod_size[depth] + idx_group_bias
+            idx_base = self.cumulative_prod_size[depth] + idx_group_bias
             accept_idx_bias = self.acceptance_check(
                 current_ground_prob,
                 cand_probs[depth][cand_probs_idx],

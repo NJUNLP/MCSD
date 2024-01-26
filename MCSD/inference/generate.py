@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import strategies
 import torch
 from transformers.modeling_outputs import ModelOutput
+
+from . import strategies
 
 
 @dataclass
@@ -12,10 +13,10 @@ class DecoderOnlyOutput(ModelOutput):
     Base class for outputs of decoder-only generation models using MCSD.
     """
 
-    sequences: torch.LongTensor = None
-    acceptance_count: int
-    draft_token_count: int
-    invocation_count: int
+    sequences: torch.LongTensor
+    acceptance_count: int = None
+    draft_token_count: int = None
+    invocation_count: int = None
 
 
 class Generator:
@@ -63,7 +64,7 @@ class Generator:
     ) -> DecoderOnlyOutput:
         target_model_past_key_values = None
         draft_model_past_key_values = None
-        draft_token_count = 0
+
         invocation_count = 0
         acceptance_count = 0
 
@@ -78,9 +79,11 @@ class Generator:
             verification_output = self.strategy.verify(
                 input_ids=draft_output.sequences,
                 target_model_past_key_values=target_model_past_key_values,
-                draft_model_past_key_values=draft_output.draft_model_past_key_values,
+                draft_model_past_key_values=draft_output.past_key_values,
                 cand_probs=draft_output.cand_probs,
             )
+
+            input_ids = verification_output.sequences
 
             invocation_count += 1
             acceptance_count += verification_output.acceptance_count
@@ -93,6 +96,6 @@ class Generator:
         return DecoderOnlyOutput(
             sequences=input_ids,
             acceptance_count=acceptance_count,
-            draft_token_count=draft_token_count,
+            draft_token_count=invocation_count * self.strategy.max_draft_len,
             invocation_count=invocation_count,
         )
