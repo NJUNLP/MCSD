@@ -7,6 +7,7 @@ from typing import Literal, Tuple
 import torch
 from inference.generate import Generator
 from model.llama_tree_attn import LlamaForCausalLM, LlamaTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
 
 # Setup logging
@@ -109,8 +110,20 @@ def run_eval(
 def main(args):
     torch_dtype = torch.float16 if args.fp16 else torch.float32
 
+    logger.info("The full evaluation configuration:\n" + repr(args))
+
+    if args.auto_model and not args.disable_tree_attn:
+        logger.warning(
+            "Tree Attn is currently not supported for models other than LLaMA. Therefore, "
+            "when using '--auto-model', Tree Attn will be disabled."
+        )
+        args.disable_tree_attn = True
+
+    ModelLoader = AutoModelForCausalLM if args.auto_model else LlamaForCausalLM
+    TokenizerLoader = AutoTokenizer if args.auto_model else LlamaTokenizer
+
     logger.info("Loading draft model: {}".format(args.draft_model))
-    draft_model = LlamaForCausalLM.from_pretrained(
+    draft_model = ModelLoader.from_pretrained(
         args.draft_model,
         torch_dtype=torch_dtype,
         device_map=0,
@@ -123,7 +136,7 @@ def main(args):
         device_map="auto",
     )
 
-    tokenizer = LlamaTokenizer.from_pretrained(args.tokenizer)
+    tokenizer = TokenizerLoader.from_pretrained(args.tokenizer)
 
     run_eval(
         draft_model,
@@ -179,7 +192,9 @@ if __name__ == "__main__":
         "--sampling-type", type=str, default="sampling", choices=["argmax", "sampling"]
     )
 
-    parser.add_argument("--disable_tqdm", action="store_true")
+    parser.add_argument("--disable-tqdm", action="store_true")
+
+    parser.add_argument("--auto-model", action="store_true")
 
     args = parser.parse_args()
 
