@@ -1,7 +1,7 @@
 # Multi-Candidate Speculative Decoding
 
 ## Code Release
-In Progress.
+See [here](./MCSD/).
 
 ## Data Release
 For [Alpaca dataset](https://github.com/flexflow/FlexFlow/tree/inference?tab=readme-ov-file#prompt-datasets), we use exactly the same exact source as [SpecInfer](https://arxiv.org/pdf/2305.09781.pdf).
