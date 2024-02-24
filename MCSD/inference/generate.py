@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
-from transformers.modeling_outputs import ModelOutput
+from transformers.modeling_outputs import ModelOutput, CausalLMOutputWithPast
 
 from . import strategies
 
@@ -20,6 +20,84 @@ class DecoderOnlyOutput(ModelOutput):
 
 
 class Generator:
+    def __init__(self) -> None:
+        pass
+
+    def generate(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+    ) -> DecoderOnlyOutput:
+        raise NotImplementedError
+
+
+class BaseGenerator:
+    def __init__(
+        self,
+        model,
+        eos_token_id: int,
+        max_new_tokens: int = 128,
+        temp: float = 1,
+    ) -> None:
+        self.model = model
+        self.eos_token_id = eos_token_id
+        self.max_new_tokens = max_new_tokens
+        self.temp = temp
+
+    def generate(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+    ) -> DecoderOnlyOutput:
+        past_key_values = None
+        invocation_count = 0
+
+        init_input_len = input_ids.size(-1)
+
+        while True:
+            if past_key_values is not None:
+                pruned_input_ids = input_ids[:, past_key_values[0][0].size(2) :]
+            else:
+                pruned_input_ids = input_ids
+
+            outputs: CausalLMOutputWithPast = self.model(
+                input_ids=pruned_input_ids,
+                use_cache=True,
+                past_key_values=past_key_values,
+                return_dict=True,
+                output_attentions=False,
+                output_hidden_states=False,
+            )
+
+            logits = outputs.logits
+
+            batch_num, seq_len, _ = logits.size()
+
+            if self.temp == 0:
+                _, ground_tokens = logits.topk(k=1, dim=-1)  # batch x seq_len x 1
+            else:
+                ground_probs = torch.softmax(
+                    logits / self.temp, dim=-1
+                )  # batch x seq_len x hidden_dim
+
+                ground_tokens = torch.multinomial(
+                    ground_probs.view(batch_num * seq_len, -1), num_samples=1
+                )  # batch*seq_len x 1
+            ground_tokens = ground_tokens.view(batch_num, seq_len)
+
+            input_ids = torch.cat(
+                (input_ids, ground_tokens[:, -1:].to(input_ids)), dim=1
+            )
+
+            invocation_count += 1
+
+            if (
+                self.eos_token_id in input_ids[0, -1:]
+                or input_ids.size(-1) - init_input_len >= self.max_new_tokens
+            ):
+                break
+        return DecoderOnlyOutput(sequences=input_ids, invocation_count=invocation_count)
+
+
+class SpeculativeGenerator:
     def __init__(
         self,
         draft_model,
