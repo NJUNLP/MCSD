@@ -13,7 +13,7 @@ transformers >= 4.34.0
 ## Evaluation CLI
 Run the following script for evaluation:
 ```
-CUDA_VISIBLE_DEVICES=0,1 python evaluation.py \
+python evaluation.py \
 --draft-model PATH_TO_DRAFT_MODEL \
 --target-model PATH_TO_TARGET_MODEL \
 --fp16 \
