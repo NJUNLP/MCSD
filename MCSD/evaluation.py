@@ -5,7 +5,7 @@ import time
 from typing import Literal, Tuple
 
 import torch
-from inference.generate import Generator
+from inference.generate import Generator, BaseGenerator, SpeculativeGenerator
 from model.llama_tree_attn import LlamaForCausalLM, LlamaTokenizer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
@@ -57,7 +57,7 @@ def run_eval(
         draft_model_temp = 1
 
     dataloader = JsonData(datapath)
-    generator = Generator(
+    generator = SpeculativeGenerator(
         draft_model,
         target_model,
         eos_token_id=tokenizer.eos_token_id,
@@ -107,6 +107,59 @@ def run_eval(
     logger.info("Block efficiency: {:.2f}".format(block_efficiency))
 
 
+def run_baseline_eval(
+    target_model,
+    tokenizer,
+    datapath: str,
+    max_new_tokens: int = 128,
+    sampling_type: Literal["argmax", "sampling"] = "sampling",
+    disable_tqdm: bool = False,
+):
+    if sampling_type not in ["argmax", "sampling"]:
+        raise ValueError(
+            f'`sampling_type` can be either `"argmax"` or `"sampling"`, but received "{sampling_type}"'
+        )
+    if sampling_type == "argmax":
+        target_model_temp = 0
+    else:
+        target_model_temp = 1
+
+    dataloader = JsonData(datapath)
+    generator = BaseGenerator(
+        target_model,
+        eos_token_id=tokenizer.eos_token_id,
+        max_new_tokens=max_new_tokens,
+        temp=target_model_temp,
+    )
+
+    target_model.eval()
+
+    logger.info("evaluation start.")
+    start_time = time.time()
+
+    invocation_count = 0
+
+    iterator = range(len(dataloader))
+    with torch.no_grad():
+        for sample_idx in iterator if disable_tqdm else tqdm(iterator):
+            prompt_text = dataloader[sample_idx]
+            inputs = tokenizer(prompt_text, return_tensors="pt").to("cuda")
+            input_ids = inputs.input_ids
+            output = generator.generate(input_ids)
+
+            invocation_count += output.invocation_count
+    end_time = time.time()
+
+    logger.info("evaluation complete.")
+
+    run_time = end_time - start_time
+
+    latency = run_time / invocation_count
+
+    logger.info("Running time: {:.2f} s".format(run_time))
+    logger.info("Token latency: {:.2f} ms".format(latency * 1000))
+
+
 def main(args):
     torch_dtype = torch.float16 if args.fp16 else torch.float32
 
@@ -127,30 +180,42 @@ def main(args):
         args.draft_model,
         torch_dtype=torch_dtype,
         device_map=0,
+        use_flash_attention_2=True if args.flash_attn else False,
     )
 
     logger.info("Loading target model: {}".format(args.target_model))
-    target_model = LlamaForCausalLM.from_pretrained(
+    target_model = ModelLoader.from_pretrained(
         args.target_model,
         torch_dtype=torch_dtype,
         device_map="auto",
+        use_flash_attention_2=True if args.flash_attn else False,
     )
 
     tokenizer = TokenizerLoader.from_pretrained(args.tokenizer)
 
-    run_eval(
-        draft_model,
-        target_model,
-        tokenizer=tokenizer,
-        k_config=args.k_config,
-        datapath=args.datapath,
-        max_new_tokens=args.max_new_tokens,
-        replacement=args.replacement,
-        speculative_sampling=not args.naive_sampling,
-        tree_attn=not args.disable_tree_attn,
-        sampling_type=args.sampling_type,
-        disable_tqdm=args.disable_tqdm,
-    )
+    if args.run_baseline:
+        run_baseline_eval(
+            target_model,
+            tokenizer=tokenizer,
+            datapath=args.datapath,
+            max_new_tokens=args.max_new_tokens,
+            sampling_type=args.sampling_type,
+            disable_tqdm=args.disable_tqdm,
+        )
+    else:
+        run_eval(
+            draft_model,
+            target_model,
+            tokenizer=tokenizer,
+            k_config=args.k_config,
+            datapath=args.datapath,
+            max_new_tokens=args.max_new_tokens,
+            replacement=args.replacement,
+            speculative_sampling=not args.naive_sampling,
+            tree_attn=not args.disable_tree_attn,
+            sampling_type=args.sampling_type,
+            disable_tqdm=args.disable_tqdm,
+        )
 
 
 if __name__ == "__main__":
@@ -195,6 +260,9 @@ if __name__ == "__main__":
     parser.add_argument("--disable-tqdm", action="store_true")
 
     parser.add_argument("--auto-model", action="store_true")
+    parser.add_argument("--run-baseline", action="store_true")
+
+    parser.add_argument("--flash-attn", action="store_true")
 
     args = parser.parse_args()
 
