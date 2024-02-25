@@ -13,7 +13,7 @@ transformers >= 4.34.0
 ## Evaluation CLI
 Run the following script for evaluation:
 ```
-CUDA_VISIBLE_DEVICES=0,1 python evaluation.py \
+python evaluation.py \
 --draft-model PATH_TO_DRAFT_MODEL \
 --target-model PATH_TO_TARGET_MODEL \
 --fp16 \
@@ -49,7 +49,7 @@ Here is an example of inference using our generator, see here for the function o
 ```python
 import torch
 from model.llama_tree_attn import LlamaForCausalLM, LlamaTokenizer
-from inference.generate import Generator
+from inference.generate import SpeculativeGenerator
 
 draft_model = LlamaForCausalLM.from_pretrained(
     "PATH_TO_DRAFT_MODEL",
@@ -63,7 +63,7 @@ target_model = LlamaForCausalLM.from_pretrained(
 )
 tokenizer = LlamaTokenizer.from_pretrained("PATH_TO_TARGET_MODEL")
 
-generator = Generator(
+generator = SpeculativeGenerator(
     draft_model,
     target_model,
     eos_token_id=tokenizer.eos_token_id,
