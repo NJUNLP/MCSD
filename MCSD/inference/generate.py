@@ -68,6 +68,7 @@ class BaseGenerator:
             )
 
             logits = outputs.logits
+            past_key_values = outputs.past_key_values
 
             batch_num, seq_len, _ = logits.size()
 
@@ -154,6 +155,8 @@ class SpeculativeGenerator:
                 past_key_values=draft_model_past_key_values,
             )
 
+            draft_model_past_key_values = draft_output.past_key_values
+
             verification_output = self.strategy.verify(
                 input_ids=draft_output.sequences,
                 target_model_past_key_values=target_model_past_key_values,
@@ -162,6 +165,13 @@ class SpeculativeGenerator:
             )
 
             input_ids = verification_output.sequences
+
+            draft_model_past_key_values = (
+                verification_output.draft_model_past_key_values
+            )
+            target_model_past_key_values = (
+                verification_output.target_model_past_key_values
+            )
 
             invocation_count += 1
             acceptance_count += verification_output.acceptance_count
