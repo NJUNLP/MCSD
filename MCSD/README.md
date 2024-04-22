@@ -79,7 +79,8 @@ generator = SpeculativeGenerator(
 prompt_text = "Hey, are you conscious? Can you talk to me?"
 inputs = tokenizer(prompt_text, return_tensors="pt").to("cuda")
 input_ids = inputs.input_ids
-output = generator.generate(input_ids)
+with torch.no_grad():
+    output = generator.generate(input_ids)
 output_text = tokenizer.batch_decode(
     output.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
 )[0]
